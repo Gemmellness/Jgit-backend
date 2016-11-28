@@ -2,9 +2,15 @@ package ajsg2.prototyping.jgit
 
 import java.io.{File, IOException}
 import java.net.{MalformedURLException, URI, URISyntaxException, URL}
+import java.util.Date
 
 import ajsg2.prototyping.jgit.exceptions._
 import org.eclipse.jgit.api.{CloneCommand, Git}
+import org.eclipse.jgit.revwalk.RevCommit
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder
+
+import scalax.collection.Graph
+import scalax.collection.edge.LDiEdge
 
 /**
   * Created by Adam on 26/11/2016.
@@ -12,21 +18,15 @@ import org.eclipse.jgit.api.{CloneCommand, Git}
 object Backend {
 
   var git : Git = _
+  var repository = _
   var workingDir : File = _
 
   def main(args: Array[String]): Unit = {
-    /*val builder = new FileRepositoryBuilder();
-    val repository = builder.setGitDir(new File("test repo"))
-      .readEnvironment() // scan environment GIT_* variables
-      .findGitDir() // scan up the file system tree
-      .build();
-
-    git = new Git(repository)*/
-
     try{
       setDirectory("D:\\Libraries\\OneDrive\\Documents\\Project\\prototyping\\backend\\testingfolder\\jgit-cookbook")
-      clone("https://github.com/centic9/jgit-cookbook.git")
-      git.close()
+      loadRepository()
+      //clone("https://github.com/centic9/jgit-cookbook.git")
+
     }catch {
       case e: Exception => System.err.println("Exception handled:")
         e.printStackTrace()
@@ -49,6 +49,30 @@ object Backend {
   }
 
   /**
+    * Load the repository in the current working directory
+    */
+  def loadRepository(): Unit = {
+    val builder = new FileRepositoryBuilder()
+    val repo = builder.setGitDir(workingDir)
+      .readEnvironment() // scan environment GIT_* variables
+      .findGitDir() // scan up the file system tree
+      .build()
+
+    repository = repo
+    git = new Git(repo)
+  }
+
+  /*
+   * Builds the commit graph, built of Commits and labelled directed edges
+   */
+  def buildCommitGraph(): Graph[Commit, LDiEdge] = {
+    val nodes = Nil
+    val edges = Nil
+
+    Graph.from(nodes, edges)
+  }
+
+  /**
     * @param url The URL of the repository to clone
     */
   @throws[IOException]
@@ -65,6 +89,8 @@ object Backend {
         throw CloneDirectoryExistsException("The directory " + workingDir.toString + " already exists")
       else {
         git = clone.call()
+        repository = git.getRepository
+        git.close()
         println("Clone operation completed successfully")
       }
     } catch {
@@ -74,4 +100,13 @@ object Backend {
     }
 
   }
+
+  class Commit {
+    val hash = ""
+    val author = ""
+    val branch = ""
+    val date = new Date(0L)
+  }
 }
+
+
