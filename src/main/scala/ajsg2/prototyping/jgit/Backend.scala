@@ -1,14 +1,18 @@
 package ajsg2.prototyping.jgit
 
 import java.io.{File, IOException}
+import java.lang.Iterable
 import java.net.{MalformedURLException, URI, URISyntaxException, URL}
 import java.util.Date
 
 import ajsg2.prototyping.jgit.exceptions._
 import org.eclipse.jgit.api.{CloneCommand, Git}
+import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scalax.collection.Graph
 import scalax.collection.edge.LDiEdge
 
@@ -18,13 +22,14 @@ import scalax.collection.edge.LDiEdge
 object Backend {
 
   var git : Git = _
-  var repository = _
+  var repository : Repository = _
   var workingDir : File = _
 
   def main(args: Array[String]): Unit = {
     try{
       setDirectory("D:\\Libraries\\OneDrive\\Documents\\Project\\prototyping\\backend\\testingfolder\\jgit-cookbook")
       loadRepository()
+      buildCommitGraph()
       //clone("https://github.com/centic9/jgit-cookbook.git")
 
     }catch {
@@ -40,7 +45,7 @@ object Backend {
     */
   @throws[WorkingDirectoryAddressException]
   def setDirectory(address: String): Unit = {
-    val dir: File = new File(address)
+    val dir: File = new File(address + "\\.git")
 
     if(!dir.isAbsolute)
       throw WorkingDirectoryAddressException("Working directory change failed: address is not absolute")
@@ -62,14 +67,29 @@ object Backend {
     git = new Git(repo)
   }
 
-  /*
-   * Builds the commit graph, built of Commits and labelled directed edges
-   */
-  def buildCommitGraph(): Graph[Commit, LDiEdge] = {
-    val nodes = Nil
+  /**
+    * Builds the commit graph, built of Commits and labelled directed edges
+    */
+  def buildCommitGraph(): Unit = {
+    val nodes = new mutable.HashMap[String, Commit]
     val edges = Nil
 
-    Graph.from(nodes, edges)
+    // Iterate over all commits
+    val commits: Iterable[RevCommit] = git.log().all().call()
+
+    commits.asScala.foreach(commit => {
+
+      // Build commit object
+      val date : Date = new Date(commit.getCommitTime.toLong*1000)
+      val c = new Commit(commit.getName, commit.getAuthorIdent.getName + ", " + commit.getAuthorIdent.getEmailAddress, "master", date.toString)
+
+      nodes += ((c.hash, c))
+    })
+
+    val nodesArray : Array[Commit] = new Array(nodes.size)
+    nodes.copyToArray[Commit](nodesArray)
+
+    Graph.from(nodesArray, edges)
   }
 
   /**
@@ -101,11 +121,11 @@ object Backend {
 
   }
 
-  class Commit {
-    val hash = ""
-    val author = ""
-    val branch = ""
-    val date = new Date(0L)
+  class Commit(hashCode:String, authorName:String, branchName:String, dateCommited:String) {
+    val hash: String = hashCode
+    val author: String = authorName
+    val branch: String = branchName
+    val date: String = dateCommited
   }
 }
 
