@@ -13,8 +13,11 @@ import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+
 import scalax.collection.Graph
-import scalax.collection.edge.LDiEdge
+import scalax.collection.GraphPredef._
+import scalax.collection.GraphEdge._
+import scalax.collection.edge.Implicits._
 
 /**
   * Created by Adam on 26/11/2016.
@@ -45,7 +48,7 @@ object Backend {
     */
   @throws[WorkingDirectoryAddressException]
   def setDirectory(address: String): Unit = {
-    val dir: File = new File(address + "\\.git")
+    val dir: File = new File(address)
 
     if(!dir.isAbsolute)
       throw WorkingDirectoryAddressException("Working directory change failed: address is not absolute")
@@ -53,43 +56,53 @@ object Backend {
       workingDir = dir
   }
 
+   /**
+    * Builds the commit graph, built of Commits and labelled directed edges
+    */
+  def buildCommitGraph(): Unit = {
+    val nodes = new mutable.HashMap[String, Commit]
+    val edges = new mutable.ListBuffer[DiEdge[Commit]]
+
+    // Generate nodes
+    val commits: Iterable[RevCommit] = git.log().all().call()
+
+    commits.asScala.foreach(commit => {
+      // Build commit object
+      val date : Date = new Date(commit.getCommitTime.toLong*1000)
+      val c = Commit(commit.getName, commit.getAuthorIdent.getName + ", " + commit.getAuthorIdent.getEmailAddress, "", date.toString, 0)
+
+      nodes += ((c.hash, c))
+    })
+
+    // Generate edges
+    val commits2 = git.log().all().call()
+
+    commits2.asScala.foreach(commit => {
+      val parents = commit.getParents
+      val default = Commit("error", "error", new Date().toString, "", 0)
+
+      parents.foreach( (p : RevCommit) => edges += nodes.getOrElse(p.getName, default) ~> nodes.getOrElse(commit.getName, default))
+
+    })
+
+    val nodesArray : Array[Commit] = nodes.toArray[Commit]
+    val edgesArray: Array[DiEdge[Commit]] = edges.toArray
+
+    Graph.from(nodesArray, edgesArray)
+  }
+
   /**
     * Load the repository in the current working directory
     */
   def loadRepository(): Unit = {
     val builder = new FileRepositoryBuilder()
-    val repo = builder.setGitDir(workingDir)
+    val repo = builder.setGitDir(new File(workingDir.toString  + "\\.git"))
       .readEnvironment() // scan environment GIT_* variables
       .findGitDir() // scan up the file system tree
       .build()
 
     repository = repo
     git = new Git(repo)
-  }
-
-  /**
-    * Builds the commit graph, built of Commits and labelled directed edges
-    */
-  def buildCommitGraph(): Unit = {
-    val nodes = new mutable.HashMap[String, Commit]
-    val edges = Nil
-
-    // Iterate over all commits
-    val commits: Iterable[RevCommit] = git.log().all().call()
-
-    commits.asScala.foreach(commit => {
-
-      // Build commit object
-      val date : Date = new Date(commit.getCommitTime.toLong*1000)
-      val c = new Commit(commit.getName, commit.getAuthorIdent.getName + ", " + commit.getAuthorIdent.getEmailAddress, "master", date.toString)
-
-      nodes += ((c.hash, c))
-    })
-
-    val nodesArray : Array[Commit] = new Array(nodes.size)
-    nodes.copyToArray[Commit](nodesArray)
-
-    Graph.from(nodesArray, edges)
   }
 
   /**
@@ -115,17 +128,14 @@ object Backend {
       }
     } catch {
       case
-        e: MalformedURLException  => throw new IOException("Clone failed: Malformed URL")
-        e: URISyntaxException  => throw new IOException("Clone failed: Malformed URL")
+        _: MalformedURLException  => throw new IOException("Clone failed: Malformed URL")
+        _: URISyntaxException  => throw new IOException("Clone failed: Malformed URL")
     }
 
   }
 
-  class Commit(hashCode:String, authorName:String, branchName:String, dateCommited:String) {
-    val hash: String = hashCode
-    val author: String = authorName
-    val branch: String = branchName
-    val date: String = dateCommited
+  case class Commit(hash:String, author:String, branch:String, date:String, depth:Int) {
+
   }
 }
 
