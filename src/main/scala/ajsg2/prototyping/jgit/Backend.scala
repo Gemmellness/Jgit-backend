@@ -6,6 +6,7 @@ import java.net.{MalformedURLException, URI, URISyntaxException, URL}
 import java.util.Date
 
 import ajsg2.prototyping.jgit.exceptions._
+
 import org.eclipse.jgit.api.{CloneCommand, Git}
 import org.eclipse.jgit.lib.{Ref, Repository}
 import org.eclipse.jgit.revwalk.RevCommit
@@ -14,8 +15,10 @@ import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scalax.collection.Graph
-import scalax.collection.GraphPredef._
 import scalax.collection.GraphEdge._
+import scalax.collection.GraphPredef._
+import scalax.collection.io.json._
+
 
 /**
 	* Created by Adam on 26/11/2016.
@@ -25,6 +28,7 @@ object Backend {
 	var git : Git = _
 	var repository : Repository = _
 	var workingDir : File = _
+	var graph : Graph[Commit, DiEdge] = _
 
 	def main(args: Array[String]): Unit = {
 		try{
@@ -88,7 +92,7 @@ object Backend {
 		})
 		val lolTypeErrors = edges.toArray
 
-		val graph = Graph.from(nodes.toArray.map(_._2), lolTypeErrors)
+		graph = Graph.from(nodes.toArray.map(_._2), lolTypeErrors)
 
 		// Generate maximum depths
 		val root: Graph[Commit, DiEdge]#NodeT = graph.nodes.filter(!_.hasPredecessors).head
@@ -109,8 +113,8 @@ object Backend {
 			if(successors.size <= 1) {
 				// End of branch or non-branching commit - label and recurse on first parent
 				node.value.branch = branch
-				if(predecessors.size > 0)
-					labelBranch(predecessors.filter(_.hash == node.value.parents.head).head, branch)
+				if(predecessors.nonEmpty)
+					labelBranch(predecessors.filter(_.value.hash == node.value.parents.head).head, branch)
 			}else {
 				// Branch created here - compare child commit times
 				val oldestSibling = node.diSuccessors.minBy(_.value.date)
@@ -118,8 +122,8 @@ object Backend {
 				if(oldestSibling.value.branch == branch){
 					// This node belongs to the oldest child's branch.
 					node.value.branch = branch
-					if(predecessors.size > 0)
-						labelBranch(predecessors.filter(_.hash == node.value.parents.head).head, branch)
+					if(predecessors.nonEmpty)
+						labelBranch(predecessors.filter(_.value.hash == node.value.parents.head).head, branch)
 				}
 			}
 
@@ -131,6 +135,10 @@ object Backend {
 
 
 	}
+
+	/*def toJson() : String = {
+		graph.toJson
+	}*/
 
 	/**
 		* Load the repository in the current working directory
