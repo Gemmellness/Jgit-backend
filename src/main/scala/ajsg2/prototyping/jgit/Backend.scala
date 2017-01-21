@@ -7,136 +7,178 @@ import java.util.Date
 
 import ajsg2.prototyping.jgit.exceptions._
 import org.eclipse.jgit.api.{CloneCommand, Git}
-import org.eclipse.jgit.lib.Repository
+import org.eclipse.jgit.lib.{Ref, Repository}
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-
 import scalax.collection.Graph
 import scalax.collection.GraphPredef._
 import scalax.collection.GraphEdge._
-import scalax.collection.edge.Implicits._
 
 /**
-  * Created by Adam on 26/11/2016.
-  */
+	* Created by Adam on 26/11/2016.
+	*/
 object Backend {
 
-  var git : Git = _
-  var repository : Repository = _
-  var workingDir : File = _
+	var git : Git = _
+	var repository : Repository = _
+	var workingDir : File = _
 
-  def main(args: Array[String]): Unit = {
-    try{
-      setDirectory("D:\\Libraries\\OneDrive\\Documents\\Project\\prototyping\\backend\\testingfolder\\jgit-cookbook")
-      loadRepository()
-      buildCommitGraph()
-      //clone("https://github.com/centic9/jgit-cookbook.git")
+	def main(args: Array[String]): Unit = {
+		try{
+			setDirectory("D:\\Libraries\\OneDrive\\Documents\\Project\\prototyping\\backend\\testingfolder\\jgit-cookbook")
+			loadRepository()
+			buildCommitGraph()
+			//clone("https://github.com/centic9/jgit-cookbook.git")
 
-    }catch {
-      case e: Exception => System.err.println("Exception handled:")
-        e.printStackTrace()
-    }
-  }
+		}catch {
+			case e: Exception => System.err.println("Exception handled:")
+				e.printStackTrace()
+		}
+	}
 
-  /**
-    * Set the working directory to the one specified in the argument.
-    *
-    * @param address The (absolute) address of the directory
-    */
-  @throws[WorkingDirectoryAddressException]
-  def setDirectory(address: String): Unit = {
-    val dir: File = new File(address)
+	/**
+		* Set the working directory to the one specified in the argument.
+		*
+		* @param address The (absolute) address of the directory
+		*/
+	@throws[WorkingDirectoryAddressException]
+	def setDirectory(address: String): Unit = {
+		val dir: File = new File(address)
 
-    if(!dir.isAbsolute)
-      throw WorkingDirectoryAddressException("Working directory change failed: address is not absolute")
-    else
-      workingDir = dir
-  }
+		if(!dir.isAbsolute)
+			throw WorkingDirectoryAddressException("Working directory change failed: address is not absolute")
+		else
+			workingDir = dir
+	}
 
-   /**
-    * Builds the commit graph, built of Commits and labelled directed edges
-    */
-  def buildCommitGraph(): Unit = {
-    val nodes = new mutable.HashMap[String, Commit]
-    val edges = new mutable.ListBuffer[DiEdge[Commit]]
+	 /**
+		* Builds the commit graph, built of Commits and directed edges
+		*/
+	def buildCommitGraph(): Unit = {
+		val nodes = new mutable.HashMap[String, Commit]
+		val edges = new mutable.ListBuffer[DiEdge[Commit]]
 
-    // Generate nodes
-    val commits: Iterable[RevCommit] = git.log().all().call()
+		// Generate nodes
+		val commits: Iterable[RevCommit] = git.log().all().call()
 
-    commits.asScala.foreach(commit => {
-      // Build commit object
-      val date : Date = new Date(commit.getCommitTime.toLong*1000)
-      val c = Commit(commit.getName, commit.getAuthorIdent.getName + ", " + commit.getAuthorIdent.getEmailAddress, "", date.toString, 0)
+		commits.asScala.foreach(commit => {
+			// Build commit object
+			val date : Date = new Date(commit.getCommitTime.toLong*1000)
+			val parents : List[RevCommit] = commit.getParents.toList
+			val parentsHashes: List[String] = parents.map(_.getName)
+			val c = Commit(commit.getName, commit.getAuthorIdent.getName + ", " + commit.getAuthorIdent.getEmailAddress,
+				"unnamed branch", date.toString, 0, parentsHashes)
 
-      nodes += ((c.hash, c))
-    })
+			nodes += ((c.hash, c))
+		})
 
-    // Generate edges
-    val commits2 = git.log().all().call()
+		// Generate edges
+		val commits2 = git.log().all().call()
 
-    commits2.asScala.foreach(commit => {
-      val parents = commit.getParents
-      val default = Commit("error", "error", new Date().toString, "", 0)
+		commits2.asScala.foreach(commit => {
+			val parents = commit.getParents
+			val default = Commit("error", "error", new Date().toString, "unnamed branch", 0, List(""))
 
-      parents.foreach( (p : RevCommit) => edges += nodes.getOrElse(p.getName, default) ~> nodes.getOrElse(commit.getName, default))
+			parents.foreach( (p : RevCommit) => edges += nodes.getOrElse(p.getName, default) ~> nodes.getOrElse(
+				commit.getName, default))
 
-    })
+		})
+		val lolTypeErrors = edges.toArray
 
-    val nodesArray : Array[Commit] = nodes.toArray[Commit]
-    val edgesArray: Array[DiEdge[Commit]] = edges.toArray
+		val graph = Graph.from(nodes.toArray.map(_._2), lolTypeErrors)
 
-    Graph.from(nodesArray, edgesArray)
-  }
+		// Generate maximum depths
+		val root: Graph[Commit, DiEdge]#NodeT = graph.nodes.filter(!_.hasPredecessors).head
 
-  /**
-    * Load the repository in the current working directory
-    */
-  def loadRepository(): Unit = {
-    val builder = new FileRepositoryBuilder()
-    val repo = builder.setGitDir(new File(workingDir.toString  + "\\.git"))
-      .readEnvironment() // scan environment GIT_* variables
-      .findGitDir() // scan up the file system tree
-      .build()
+		def maxDepth(node : Graph[Commit, DiEdge]#NodeT, depth : Int) : Unit = {
+			node.value.depth = Math.max(node.value.depth, depth)
 
-    repository = repo
-    git = new Git(repo)
-  }
+			node.diSuccessors.foreach(maxDepth(_,depth+1))
+		}
 
-  /**
-    * @param url The URL of the repository to clone
-    */
-  @throws[IOException]
-  @throws[CloneDirectoryExistsException]
-  def clone(url: String): Unit = {
-    try {
-      val uri: URI = new URL(url).toURI
+		maxDepth(root, 0)
 
-      val clone: CloneCommand = Git.cloneRepository
-        .setURI(uri.toString)
-        .setDirectory(workingDir)
+		// Label branches
+		def labelBranch(node : Graph[Commit, DiEdge]#NodeT, branch : String) : Unit = {
+			val successors = node.diSuccessors
+			val predecessors = node.diPredecessors
 
-      if (workingDir.exists)
-        throw CloneDirectoryExistsException("The directory " + workingDir.toString + " already exists")
-      else {
-        git = clone.call()
-        repository = git.getRepository
-        git.close()
-        println("Clone operation completed successfully")
-      }
-    } catch {
-      case
-        _: MalformedURLException  => throw new IOException("Clone failed: Malformed URL")
-        _: URISyntaxException  => throw new IOException("Clone failed: Malformed URL")
-    }
+			if(successors.size <= 1) {
+				// End of branch or non-branching commit - label and recurse on first parent
+				node.value.branch = branch
+				if(predecessors.size > 0)
+					labelBranch(predecessors.filter(_.hash == node.value.parents.head).head, branch)
+			}else {
+				// Branch created here - compare child commit times
+				val oldestSibling = node.diSuccessors.minBy(_.value.date)
 
-  }
+				if(oldestSibling.value.branch == branch){
+					// This node belongs to the oldest child's branch.
+					node.value.branch = branch
+					if(predecessors.size > 0)
+						labelBranch(predecessors.filter(_.hash == node.value.parents.head).head, branch)
+				}
+			}
 
-  case class Commit(hash:String, author:String, branch:String, date:String, depth:Int) {
+		}
 
-  }
+		// Start at each branch
+		git.branchList().call().asScala.foreach((r : Ref) => labelBranch(graph.nodes.filter(
+			_.value.hash == r.getObjectId.getName).head, r.getName))
+
+
+	}
+
+	/**
+		* Load the repository in the current working directory
+		*/
+	def loadRepository(): Unit = {
+		val builder = new FileRepositoryBuilder()
+		val repo = builder.setGitDir(new File(workingDir.toString  + "\\.git"))
+			.readEnvironment() // scan environment GIT_* variables
+			.findGitDir() // scan up the file system tree
+			.build()
+
+		repository = repo
+		git = new Git(repo)
+	}
+
+	/**
+		* @param url The URL of the repository to clone
+		*/
+	@throws[IOException]
+	@throws[CloneDirectoryExistsException]
+	def clone(url: String): Unit = {
+		try {
+			val uri: URI = new URL(url).toURI
+
+			val clone: CloneCommand = Git.cloneRepository
+				.setURI(uri.toString)
+				.setDirectory(workingDir)
+
+			if (workingDir.exists)
+				throw CloneDirectoryExistsException("The directory " + workingDir.toString + " already exists")
+			else {
+				git = clone.call()
+				repository = git.getRepository
+				git.close()
+				println("Clone operation completed successfully")
+			}
+		} catch {
+			case
+				_: MalformedURLException  => throw new IOException("Clone failed: Malformed URL")
+				_: URISyntaxException  => throw new IOException("Clone failed: Malformed URL")
+		}
+
+	}
+
+	case class Commit(hash:String, author:String, var branch:String, date:String, var depth:Int,
+					  parents:List[String]) {
+
+	}
 }
 
 

@@ -9,4 +9,4 @@ libraryDependencies += "org.eclipse.jgit" % "org.eclipse.jgit" % "4.5.0.20160921
 // https://mvnrepository.com/artifact/org.slf4j/slf4j-simple
 libraryDependencies += "org.slf4j" % "slf4j-simple" % "1.7.21"
 
-libraryDependencies += "org.scala-graph" % "graph-core_2.11" % "1.11.3"
+libraryDependencies += "org.scala-graph" %% "graph-core" % "1.11.4"
