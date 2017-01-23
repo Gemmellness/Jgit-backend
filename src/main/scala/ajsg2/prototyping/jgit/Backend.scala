@@ -6,7 +6,6 @@ import java.net.{MalformedURLException, URI, URISyntaxException, URL}
 import java.util.Date
 
 import ajsg2.prototyping.jgit.exceptions._
-
 import org.eclipse.jgit.api.{CloneCommand, Git}
 import org.eclipse.jgit.lib.{Ref, Repository}
 import org.eclipse.jgit.revwalk.RevCommit
@@ -18,6 +17,8 @@ import scalax.collection.Graph
 import scalax.collection.GraphEdge._
 import scalax.collection.GraphPredef._
 import scalax.collection.io.json._
+import scalax.collection.io.json.descriptor.NodeDescriptor
+import scalax.collection.io.json.descriptor.predefined.DiHyper
 
 
 /**
@@ -29,6 +30,18 @@ object Backend {
 	var repository : Repository = _
 	var workingDir : File = _
 	var graph : Graph[Commit, DiEdge] = _
+
+	// Json descriptors
+	val commitDescriptor = new NodeDescriptor[Commit](typeId = "Commits") {
+		def id(node: Any): String = node match {
+			case Commit(hash, _, _, _, _, _) => hash
+		}
+	}
+
+	val descriptor = new Descriptor[GitGraph](
+		defaultNodeDescriptor = commitDescriptor,
+		defaultEdgeDescriptor = DiHyper.descriptor[GitGraph]()
+	)
 
 	def main(args: Array[String]): Unit = {
 		try{
@@ -95,7 +108,7 @@ object Backend {
 		graph = Graph.from(nodes.toArray.map(_._2), lolTypeErrors)
 
 		// Generate maximum depths
-		val root: Graph[Commit, DiEdge]#NodeT = graph.nodes.filter(!_.hasPredecessors).head
+		val root: Graph[Commit, DiEdge]#NodeT = graph.nodes.toSet.filter(!_.hasPredecessors).head
 
 		def maxDepth(node : Graph[Commit, DiEdge]#NodeT, depth : Int) : Unit = {
 			node.value.depth = Math.max(node.value.depth, depth)
@@ -130,15 +143,19 @@ object Backend {
 		}
 
 		// Start at each branch
-		git.branchList().call().asScala.foreach((r : Ref) => labelBranch(graph.nodes.filter(
+		git.branchList().call().asScala.foreach((r : Ref) => labelBranch(graph.nodes.toSet.filter(
 			_.value.hash == r.getObjectId.getName).head, r.getName))
 
 
 	}
 
-	/*def toJson() : String = {
-		graph.toJson
-	}*/
+	/**
+	  *
+	  * @return A String representing the current graph in JSON format
+	  */
+	def generateJson() : String = {
+		graph.toJson(descriptor)
+	}
 
 	/**
 		* Load the repository in the current working directory
@@ -183,10 +200,9 @@ object Backend {
 
 	}
 
+	sealed trait GitGraph
 	case class Commit(hash:String, author:String, var branch:String, date:String, var depth:Int,
-					  parents:List[String]) {
-
-	}
+					  parents:List[String]) extends GitGraph
 }
 
 
