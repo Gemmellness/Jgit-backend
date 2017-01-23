@@ -1,6 +1,6 @@
 package ajsg2.prototyping.jgit
 
-import java.io.{File, IOException}
+import java.io.{BufferedWriter, File, FileWriter, IOException}
 import java.lang.Iterable
 import java.net.{MalformedURLException, URI, URISyntaxException, URL}
 import java.util.Date
@@ -18,7 +18,7 @@ import scalax.collection.GraphEdge._
 import scalax.collection.GraphPredef._
 import scalax.collection.io.json._
 import scalax.collection.io.json.descriptor.NodeDescriptor
-import scalax.collection.io.json.descriptor.predefined.DiHyper
+import scalax.collection.io.json.descriptor.predefined.Di
 
 
 /**
@@ -32,23 +32,34 @@ object Backend {
 	var graph : Graph[Commit, DiEdge] = _
 
 	// Json descriptors
+
+	// Custom serializer
+	/*final class CommitSerializer extends CustomSerializer[Commit] (fmts => (
+		{ case JArray(JString(hash) :: JString(author) :: JString(branch) :: JString(date) :: JInt(dateVal) :: JInt(depth) :: lol :: Nil) =>
+			Commit(hash, author, branch, date, dateVal.longValue, depth.intValue, lol.extract[List[String]])
+		},
+		{ case Commit(hash, author, branch, date, _, depth, _) =>
+			JArray(JString(hash) :: JString(author) :: JString(branch) :: JString(date.toString) :: JString(depth.toString):: Nil)
+		}))*/
+
 	val commitDescriptor = new NodeDescriptor[Commit](typeId = "Commits") {
 		def id(node: Any): String = node match {
-			case Commit(hash, _, _, _, _, _) => hash
+			case Commit(hash, _, _, _, _, _, _) => hash
 		}
 	}
 
-	val descriptor = new Descriptor[GitGraph](
+	val descriptor = new Descriptor[Commit](
 		defaultNodeDescriptor = commitDescriptor,
-		defaultEdgeDescriptor = DiHyper.descriptor[GitGraph]()
+		defaultEdgeDescriptor = Di.descriptor[Commit]()
 	)
 
 	def main(args: Array[String]): Unit = {
 		try{
-			setDirectory("D:\\Libraries\\OneDrive\\Documents\\Project\\prototyping\\backend\\testingfolder\\jgit-cookbook")
+			setDirectory("C:\\Users\\Adam\\Documents\\GitHub\\Project\\Jgit-backend\\testingfolder\\wbranch")
+			//clone("https://github.com/centic9/jgit-cookbook.git")
 			loadRepository()
 			buildCommitGraph()
-			//clone("https://github.com/centic9/jgit-cookbook.git")
+			outputJson(generateJson())
 
 		}catch {
 			case e: Exception => System.err.println("Exception handled:")
@@ -87,7 +98,7 @@ object Backend {
 			val parents : List[RevCommit] = commit.getParents.toList
 			val parentsHashes: List[String] = parents.map(_.getName)
 			val c = Commit(commit.getName, commit.getAuthorIdent.getName + ", " + commit.getAuthorIdent.getEmailAddress,
-				"unnamed branch", date.toString, 0, parentsHashes)
+				"unnamed branch", date.toString, date.getTime, 0, parentsHashes)
 
 			nodes += ((c.hash, c))
 		})
@@ -97,12 +108,13 @@ object Backend {
 
 		commits2.asScala.foreach(commit => {
 			val parents = commit.getParents
-			val default = Commit("error", "error", new Date().toString, "unnamed branch", 0, List(""))
+			val default = Commit("error", "error", "unnamed branch", new Date(0L).toString, 0L, 0, List(""))
 
 			parents.foreach( (p : RevCommit) => edges += nodes.getOrElse(p.getName, default) ~> nodes.getOrElse(
 				commit.getName, default))
 
 		})
+
 		val lolTypeErrors = edges.toArray
 
 		graph = Graph.from(nodes.toArray.map(_._2), lolTypeErrors)
@@ -130,7 +142,7 @@ object Backend {
 					labelBranch(predecessors.filter(_.value.hash == node.value.parents.head).head, branch)
 			}else {
 				// Branch created here - compare child commit times
-				val oldestSibling = node.diSuccessors.minBy(_.value.date)
+				val oldestSibling = node.diSuccessors.minBy(_.value.dateVal)
 
 				if(oldestSibling.value.branch == branch){
 					// This node belongs to the oldest child's branch.
@@ -145,8 +157,6 @@ object Backend {
 		// Start at each branch
 		git.branchList().call().asScala.foreach((r : Ref) => labelBranch(graph.nodes.toSet.filter(
 			_.value.hash == r.getObjectId.getName).head, r.getName))
-
-
 	}
 
 	/**
@@ -155,6 +165,12 @@ object Backend {
 	  */
 	def generateJson() : String = {
 		graph.toJson(descriptor)
+	}
+
+	def outputJson(json: String): Unit = {
+		val writer = new BufferedWriter(new FileWriter("data.json"))
+		writer.write(json)
+		writer.close()
 	}
 
 	/**
@@ -201,7 +217,7 @@ object Backend {
 	}
 
 	sealed trait GitGraph
-	case class Commit(hash:String, author:String, var branch:String, date:String, var depth:Int,
+	case class Commit(hash:String, author:String, var branch:String, date:String, dateVal: Long, var depth:Int,
 					  parents:List[String]) extends GitGraph
 }
 
