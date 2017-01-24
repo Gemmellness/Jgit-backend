@@ -6,11 +6,13 @@ import java.net.{MalformedURLException, URI, URISyntaxException, URL}
 import java.util.Date
 
 import ajsg2.prototyping.jgit.exceptions._
+import org.eclipse.jgit.api.ListBranchCommand.ListMode
 import org.eclipse.jgit.api.{CloneCommand, Git}
 import org.eclipse.jgit.lib.{Ref, Repository}
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scalax.collection.Graph
@@ -55,8 +57,8 @@ object Backend {
 
 	def main(args: Array[String]): Unit = {
 		try{
-			setDirectory("C:\\Users\\Adam\\Documents\\GitHub\\Project\\Jgit-backend\\testingfolder\\wbranch")
-			//clone("https://github.com/centic9/jgit-cookbook.git")
+			setDirectory("C:\\Users\\Adam\\Documents\\GitHub\\Project\\Jgit-backend\\testingfolder\\solarhud")
+			//clone("https://github.com/minimaxir/big-list-of-naughty-strings.git")
 			loadRepository()
 			buildCommitGraph()
 			outputJson(generateJson())
@@ -131,6 +133,7 @@ object Backend {
 		maxDepth(root, 0)
 
 		// Label branches
+		@tailrec
 		def labelBranch(node : Graph[Commit, DiEdge]#NodeT, branch : String) : Unit = {
 			val successors = node.diSuccessors
 			val predecessors = node.diPredecessors
@@ -142,20 +145,19 @@ object Backend {
 					labelBranch(predecessors.filter(_.value.hash == node.value.parents.head).head, branch)
 			}else {
 				// Branch created here - compare child commit times
-				val oldestSibling = node.diSuccessors.minBy(_.value.dateVal)
+				val youngestSibling = node.diSuccessors.maxBy(_.value.dateVal)
 
-				if(oldestSibling.value.branch == branch){
+				if(youngestSibling.value.branch == branch){
 					// This node belongs to the oldest child's branch.
 					node.value.branch = branch
 					if(predecessors.nonEmpty)
 						labelBranch(predecessors.filter(_.value.hash == node.value.parents.head).head, branch)
 				}
 			}
-
 		}
 
 		// Start at each branch
-		git.branchList().call().asScala.foreach((r : Ref) => labelBranch(graph.nodes.toSet.filter(
+		git.branchList().setListMode(ListMode.ALL).call().asScala.foreach((r : Ref) => labelBranch(graph.nodes.toSet.filter(
 			_.value.hash == r.getObjectId.getName).head, r.getName))
 	}
 
