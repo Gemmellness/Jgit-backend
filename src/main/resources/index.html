@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<head>
+    <style>
+
+        body {
+            margin: 0;
+            min-width: 800px;
+            min-height: 600px;
+            overflow-y: hidden;
+            overflow-x: hidden;
+        }
+
+        .node circle{
+            r: 5;
+        }
+
+        .label text{
+            font-family: "sans-serif";
+            font-weight: bold;
+        }
+
+    </style>
+</head>
+
+<body onresize="resize()"><script src="d3.v4.min.js" charset="utf-8"></script>
+<script>
+    /* Magic numbers etc */
+    var width = innerWidth,
+        height = innerHeight;
+
+    // Colours (solarized)
+    var baseColours = ['#002b36', '#073642', '#586e75', '#657b83', '#839496', '#93a1a1', '#eee8d5', '#fdf6e3'],
+        highlightColours = ['#b58900', '#cb4b16', '#dc322f', '#d33682', '#6c71c4', '#268bd2', '#2aa198', '#859900', '#000000'];
+
+    var xSpacing = 40;
+    var ySpacing = 50;
+    var nodeSize = 10;
+
+    /* Behaviours */
+    // Zoom behaviour
+    var zoom = d3.zoom()
+            .scaleExtent([0.01, 10])
+            .on("zoom", zoomed);
+
+    // Drag behaviour
+    var drag = d3.drag()
+            .on("start", dragStarted)
+            .on("drag", dragged)
+            .on("end", dragEnded);
+
+    /* Basic containers */
+    // Place svg, set size
+    var graph = d3.select("body")
+            .style("background", baseColours[0])
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .append("g")
+            .attr("transform", "translate(" + 0 + "," + 0 + ")")
+            .call(zoom);
+
+    // Panning rectangle
+    var rect = graph.append("rect")
+            .attr("width", width)
+            .attr("height", height  )
+            .style("fill", "none")
+            .style("pointer-events", "all");
+
+    var container = graph.append("g");
+
+    var labels = container.append("g")
+        .attr("class", "labels");
+
+    var mouseDown = 0;
+
+    /*
+    graph.append("defs").append("marker")
+        .attr({
+            "id":"arrow",
+            "viewBox":"0 -5 10 10",
+            "refX":5,
+            "refY":0,
+            "markerWidth":4,
+            "markerHeight":4,
+            "orient":"auto"
+        })
+        .append("path")
+        .attr("d", "M0,-5L10,0L0,5")
+        .attr("class","arrowHead");*/
+
+    var logicalGraph = {
+        nodes: [],
+        edges: []
+    };
+
+    var nodes,
+        edges;
+
+    /* Assumptions about this data:
+     *
+     *  All nodes have unique hashes
+     * The DAG is connected
+     * Depth is the maximum path length to the root
+     *
+     * */
+    d3.json("localhost:1234/graph", function(error, data) {
+        if (error) throw error;
+
+        logicalGraph.nodes = [];
+        logicalGraph.edges = data.edges;
+
+        var currentLayer = data.nodes.filter(function isHead(node) { return node.depth == 0});
+        var visited = [currentLayer[0].hash];
+        var nextLayer = [];
+
+        var branches = [currentLayer[0].branch];
+
+        var x = 0;
+
+        while(currentLayer.length > 0){
+            currentLayer = currentLayer.sort(function (a, b) {
+                var ai = branches.indexOf(a.branch);
+                var bi = branches.indexOf(b.branch);
+                if(ai < bi) return -1;
+                if(ai > bi) return 1;
+                return 0;
+            });
+
+            for(var j = 0; j < currentLayer.length; j++){
+                var node = currentLayer[j];
+
+                //Set logical coords
+                //node.x = xSpacing*(x+1);
+                node.x = xSpacing*(branches.indexOf(node.branch)+1);
+                node.y = ySpacing*(node.depth+1);
+                x++;
+
+                // Store data in data
+                logicalGraph.nodes.push(node);
+
+                // Find all child nodes not already in the graph (for the next layer)
+                var outEdges = data.edges.filter(function (edge) { return edge.n1 == node.hash;});
+
+                for(var k = 0; k < outEdges.length; k++){
+                    var candidateChild = data.nodes.find(function (node) {return node.hash == outEdges[k].n2});
+
+                    // Check if already in the graph
+                    var previouslyOccurs = false;
+                    for(var l = 0; l < visited.length && !previouslyOccurs; l++){
+                        if (visited[l] == candidateChild.hash)
+                            previouslyOccurs = true;
+                    }
+
+                    // If not already in graph/next layer, push node to next layer queue
+                    if(!previouslyOccurs && candidateChild.depth == node.depth+1) {
+                        nextLayer.push(candidateChild);
+                        visited.push(candidateChild.hash);
+
+                        // Check branches
+                        //noinspection JSUnresolvedVariable
+                        if(branches.indexOf(candidateChild.branch) == -1)
+                        { //noinspection JSUnresolvedVariable
+                            branches.push(candidateChild.branch);
+                        }
+                    }
+
+                }
+            }
+
+            currentLayer = nextLayer;
+            nextLayer = [];
+
+            x = 0;
+        }
+
+        for(var i = 0; i < branches.length; i++){
+            console.log(branches[i] + " " + i);
+        }
+
+        // Create edges
+        edges = container.append("g")
+            .attr("class", "edges")
+            .selectAll(".edge")
+            .data(logicalGraph.edges)
+            .enter().append("line")
+            .attr("class", "edge")
+            .attr("x1", function (d) {return logicalGraph.nodes.find(function (node) {return d.n1 == node.hash;}).x})
+            .attr("y1", function (d) {return logicalGraph.nodes.find(function (node) {return d.n1 == node.hash;}).y})
+            .attr("x2", function (d) {return logicalGraph.nodes.find(function (node) {return d.n2 == node.hash;}).x})
+            .attr("y2", function (d) {return logicalGraph.nodes.find(function (node) {return d.n2 == node.hash;}).y})
+            .attr("n1", function (d) {return d.n1})
+            .attr("n2", function (d) {return d.n2})
+            .attr("stroke", (function (d) {
+                return highlightColours[branches.indexOf(data.nodes.filter(function isTarget(node) {return node.hash == d.n2})[0].branch) % highlightColours.length];
+            }))
+            .attr("opacity", 0.6)
+            .attr("stroke-width", 3);
+            //.attr("marker-end", "url(#arrow");
+
+        // Create nodes
+        nodes = container.append("g")
+            .attr("class", "graph")
+            .selectAll("node")
+            .data(logicalGraph.nodes)
+            .enter().append("circle")
+            .attr("class", "node")
+            .attr("r", nodeSize)
+            .attr("cx", function(d) {return d.x;})
+            .attr("cy", function(d) {return d.y;})
+            .attr("fill", function (d) {
+                return highlightColours[branches.indexOf(d.branch) % highlightColours.length];
+            })
+            .call(drag)
+            .on("mouseover", function (d, i) {
+                d3.select(this).attr("stroke", baseColours[1])
+                    .attr("stroke-width", "1.5px");
+
+                if(!mouseDown)
+                    labels.append("text")
+                        .attr("class", "label")
+                        .attr("text-anchor", "middle")
+                        .attr("x", d.x)
+                        .attr("y", d.y + 25)
+                        .text(d.hash.substring(0, 6) + "...")
+                        .attr("node", i)
+                        .attr("fill", baseColours[6])
+                        .attr("font-family", "sans-serif")
+                        .attr("font-weight", "bold")
+                        .raise();
+            })
+            .on("mouseout", function () {
+                d3.select(this).attr("stroke-width", "0px");
+
+                // IMPORTANT - only 1 label can be present at once (I think)
+                if(!mouseDown)
+                    labels.selectAll(".label").remove();
+            });
+
+        labels.raise();
+
+    });
+
+    function updateEdges () {
+        edges.attr("x1", function (d) {return logicalGraph.nodes.find(function (node) {return d.n1 == node.hash;}).x})
+            .attr("y1", function (d) {return logicalGraph.nodes.find(function (node) {return d.n1 == node.hash;}).y})
+            .attr("x2", function (d) {return logicalGraph.nodes.find(function (node) {return d.n2 == node.hash;}).x})
+            .attr("y2", function (d) {return logicalGraph.nodes.find(function (node) {return d.n2 == node.hash;}).y});
+    }
+
+    function resize() {
+        // Update size vars
+        width = innerWidth;
+        height = innerHeight;
+
+        // Update svg
+        d3.selectAll("svg")
+            .attr("width", width)
+            .attr("height", height);
+
+        // Update rect
+        rect.attr("width", width)
+            .attr("height", height);
+    }
+
+    function zoomed() {
+        container.attr("transform", d3.event.transform);
+    }
+
+    function dragStarted() {
+        d3.event.sourceEvent.stopPropagation();
+        labels.selectAll(".label")
+            .attr("visibility", "hidden");
+
+        mouseDown = 1;
+    }
+
+    function dragged(d) {
+        d3.select(this).attr("cx", d.x = d3.event.x)
+                .attr("cy", d.y = d3.event.y);
+
+        updateEdges();
+    }
+
+    function dragEnded(){
+        // Update label (only 1)
+
+        var index = labels.select(".label").attr("node");
+
+        labels.select(".label")
+            .attr("visibility", "visible")
+            .attr("x", logicalGraph.nodes[index].x)
+            .attr("y", logicalGraph.nodes[index].y+20);
+
+        mouseDown = 0;
+    }
+
+</script></body>
