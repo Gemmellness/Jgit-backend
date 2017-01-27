@@ -14,7 +14,7 @@ import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import scala.collection.mutable
+import scala.collection.{Set, mutable}
 import scalax.collection.Graph
 import scalax.collection.GraphEdge._
 import scalax.collection.GraphPredef._
@@ -100,7 +100,7 @@ object Backend {
 			val parents : List[RevCommit] = commit.getParents.toList
 			val parentsHashes: List[String] = parents.map(_.getName)
 			val c = Commit(commit.getName, commit.getAuthorIdent.getName + ", " + commit.getAuthorIdent.getEmailAddress,
-				"unnamed branch", date.toString, date.getTime, 0, parentsHashes)
+				"", date.toString, date.getTime, 0, parentsHashes)
 
 			nodes += ((c.hash, c))
 		})
@@ -110,7 +110,7 @@ object Backend {
 
 		commits2.asScala.foreach(commit => {
 			val parents = commit.getParents
-			val default = Commit("error", "error", "unnamed branch", new Date(0L).toString, 0L, 0, List(""))
+			val default = Commit("error", "error", "", new Date(0L).toString, 0L, 0, List(""))
 
 			parents.foreach( (p : RevCommit) => edges += nodes.getOrElse(p.getName, default) ~> nodes.getOrElse(
 				commit.getName, default))
@@ -159,6 +159,10 @@ object Backend {
 		// Start at each branch
 		git.branchList().setListMode(ListMode.ALL).call().asScala.foreach((r : Ref) => labelBranch(graph.nodes.toSet.filter(
 			_.value.hash == r.getObjectId.getName).head, r.getName))
+
+
+		// Assign a name to unnamed branches
+		graph.nodes.filter((n : Graph[Commit, DiEdge]#NodeT) => n.diSuccessors.count(_.value.branch == "") == 0).zipWithIndex.foreach{ t => labelBranch(t._1, "unnamedbranch" + t._2)}
 	}
 
 	/**
