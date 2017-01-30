@@ -29,7 +29,7 @@ trait MyService extends HttpService {
     val myRoute =
         path("graph") {
             Backend.setDirectory("C:\\Users\\Adam\\Documents\\GitHub\\Project\\Jgit-backend\\testingfolder\\solarhud")
-            //clone("https://github.com/minimaxir/big-list-of-naughty-strings.git")
+            //Backend.clone("https://github.com/Stochast1c/solarhud.git")
             Backend.loadRepository()
             Backend.buildCommitGraph()
             println("Sending graph JSON")

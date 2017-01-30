@@ -14,7 +14,7 @@ import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import scala.collection.{Set, mutable}
+import scala.collection.mutable
 import scalax.collection.Graph
 import scalax.collection.GraphEdge._
 import scalax.collection.GraphPredef._
@@ -57,8 +57,8 @@ object Backend {
 
 	def main(args: Array[String]): Unit = {
 		try{
-			setDirectory("C:\\Users\\Adam\\Documents\\GitHub\\Project\\Jgit-backend\\testingfolder\\solarhud")
-			//clone("https://github.com/minimaxir/big-list-of-naughty-strings.git")
+			setDirectory("D:\\Libraries\\OneDrive\\Documents\\Project\\prototyping\\backend\\testingfolder\\solarhud")
+			//clone("https://github.com/Stochast1c/solarhud.git")
 			loadRepository()
 			buildCommitGraph()
 			outputJson(generateJson())
@@ -160,9 +160,16 @@ object Backend {
 		git.branchList().setListMode(ListMode.ALL).call().asScala.foreach((r : Ref) => labelBranch(graph.nodes.toSet.filter(
 			_.value.hash == r.getObjectId.getName).head, r.getName))
 
-
 		// Assign a name to unnamed branches
-		graph.nodes.filter((n : Graph[Commit, DiEdge]#NodeT) => n.diSuccessors.count(_.value.branch == "") == 0).zipWithIndex.foreach{ t => labelBranch(t._1, "unnamedbranch" + t._2)}
+		var candidateBranches = graph.nodes.filter((n : Graph[Commit, DiEdge]#NodeT) => n.value.branch == "" &&
+			n.diSuccessors.count(_.value.branch == "") == 0)
+
+		while(candidateBranches.nonEmpty){
+			println(candidateBranches.size)
+			candidateBranches.zipWithIndex.foreach{ t => labelBranch(t._1, "unnamedbranch" + t._2)}
+			candidateBranches = graph.nodes.filter((n : Graph[Commit, DiEdge]#NodeT) => n.value.branch == "" &&
+			n.diSuccessors.count(_.value.branch == "") == 0)
+		}
 	}
 
 	/**
