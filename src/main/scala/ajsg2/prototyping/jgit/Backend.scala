@@ -7,7 +7,7 @@ import java.util.Date
 
 import ajsg2.prototyping.jgit.exceptions._
 import org.eclipse.jgit.api.ListBranchCommand.ListMode
-import org.eclipse.jgit.api.{CloneCommand, Git}
+import org.eclipse.jgit.api.{CloneCommand, Git, Status}
 import org.eclipse.jgit.lib.{Ref, Repository}
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
@@ -57,11 +57,14 @@ object Backend {
 
 	def main(args: Array[String]): Unit = {
 		try{
-			setDirectory("D:\\Libraries\\OneDrive\\Documents\\Project\\prototyping\\backend\\testingfolder\\solarhud")
+			setDirectory("C:\\Users\\Adam\\OneDrive\\Documents\\Project\\prototyping\\backend\\testingfolder\\test")
 			//clone("https://github.com/Stochast1c/solarhud.git")
 			loadRepository()
 			buildCommitGraph()
 			outputJson(generateJson())
+
+			for (_ <- io.Source.stdin.getLines)
+				println(detectChangedFiles())
 
 		}catch {
 			case e: Exception => System.err.println("Exception handled:")
@@ -100,7 +103,7 @@ object Backend {
 			val parents : List[RevCommit] = commit.getParents.toList
 			val parentsHashes: List[String] = parents.map(_.getName)
 			val c = Commit(commit.getName, commit.getAuthorIdent.getName + ", " + commit.getAuthorIdent.getEmailAddress,
-				"", date.toString, date.getTime, 0, parentsHashes)
+				"", date.toString, date.getTime, -1, parentsHashes)
 
 			nodes += ((c.hash, c))
 		})
@@ -110,7 +113,7 @@ object Backend {
 
 		commits2.asScala.foreach(commit => {
 			val parents = commit.getParents
-			val default = Commit("error", "error", "", new Date(0L).toString, 0L, 0, List(""))
+			val default = Commit("error", "error", "", new Date(0L).toString, 0L, -1, List(""))
 
 			parents.foreach( (p : RevCommit) => edges += nodes.getOrElse(p.getName, default) ~> nodes.getOrElse(
 				commit.getName, default))
@@ -122,12 +125,13 @@ object Backend {
 		graph = Graph.from(nodes.toArray.map(_._2), lolTypeErrors)
 
 		// Generate maximum depths
-		val root: Graph[Commit, DiEdge]#NodeT = graph.nodes.toSet.filter(!_.hasPredecessors).head
+		val root = graph.nodes.toSet.filter(!_.hasPredecessors).head
 
 		def maxDepth(node : Graph[Commit, DiEdge]#NodeT, depth : Int) : Unit = {
-			node.value.depth = Math.max(node.value.depth, depth)
-
-			node.diSuccessors.foreach(maxDepth(_,depth+1))
+			if(node.value.depth < depth) {
+				node.value.depth = depth
+				node.diSuccessors.foreach(maxDepth(_, depth + 1))
+			}
 		}
 
 		maxDepth(root, 0)
@@ -144,14 +148,23 @@ object Backend {
 				if(predecessors.nonEmpty)
 					labelBranch(predecessors.filter(_.value.hash == node.value.parents.head).head, branch)
 			}else {
-				// Branch created here - compare child commit times
-				val youngestSibling = node.diSuccessors.maxBy(_.value.dateVal)
+				// Branch created here
 
-				if(youngestSibling.value.branch == branch){
-					// This node belongs to the oldest child's branch.
+				// First check to see if any child branches match the branch being currently assigned. If not we should definitely assign this branch to prevent infinite loops
+				if(node.diSuccessors.count(_.value.branch == branch) == 0){
 					node.value.branch = branch
-					if(predecessors.nonEmpty)
+					if (predecessors.nonEmpty)
 						labelBranch(predecessors.filter(_.value.hash == node.value.parents.head).head, branch)
+				}else{
+					// Else, compare child commit times
+					val oldestSibling = node.diSuccessors.minBy(_.value.dateVal)
+
+					if(oldestSibling.value.branch == branch) {
+						// This node belongs to the oldest child's branch.
+						node.value.branch = branch
+						if (predecessors.nonEmpty)
+							labelBranch(predecessors.filter(_.value.hash == node.value.parents.head).head, branch)
+					}
 				}
 			}
 		}
@@ -164,11 +177,14 @@ object Backend {
 		var candidateBranches = graph.nodes.filter((n : Graph[Commit, DiEdge]#NodeT) => n.value.branch == "" &&
 			n.diSuccessors.count(_.value.branch == "") == 0)
 
+		var i = 0
 		while(candidateBranches.nonEmpty){
-			println(candidateBranches.size)
 			candidateBranches.zipWithIndex.foreach{ t => labelBranch(t._1, "unnamedbranch" + t._2)}
 			candidateBranches = graph.nodes.filter((n : Graph[Commit, DiEdge]#NodeT) => n.value.branch == "" &&
-			n.diSuccessors.count(_.value.branch == "") == 0)
+					n.diSuccessors.count(_.value.branch == "") == 0)
+
+			println(candidateBranches.size)
+			i += 1
 		}
 	}
 
@@ -227,6 +243,22 @@ object Backend {
 				_: URISyntaxException  => throw new IOException("Clone failed: Malformed URL")
 		}
 
+	}
+
+	def detectChangedFiles() : List[String] = {
+		var output: List[String] = List[String]()
+		val status: Status = git.status().call()
+
+		for(m <- status.getModified.iterator.asScala)
+			output = ("Modified: " + m) :: output
+
+		for(m <- status.getMissing.iterator.asScala)
+			output = ("Missing: " + m) :: output
+
+		for(u <- status.getUntracked.iterator.asScala)
+			output = ("Untracked: " + u) :: output
+
+		output
 	}
 
 	sealed trait GitGraph

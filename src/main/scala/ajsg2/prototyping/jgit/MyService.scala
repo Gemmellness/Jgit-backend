@@ -28,9 +28,10 @@ trait MyService extends HttpService {
 
     val myRoute =
         path("graph") {
-            Backend.setDirectory("C:\\Users\\Adam\\Documents\\GitHub\\Project\\Jgit-backend\\testingfolder\\solarhud")
-            //Backend.clone("https://github.com/Stochast1c/solarhud.git")
+            Backend.setDirectory("C:\\Users\\Adam\\OneDrive\\Documents\\Project\\prototyping\\backend\\testingfolder\\brain")
+            //Backend.clone("https://github.com/csete/gqrx.git")
             Backend.loadRepository()
+            println("Loaded repo")
             Backend.buildCommitGraph()
             println("Sending graph JSON")
             complete(Backend.generateJson())
