@@ -2,6 +2,8 @@ package ajsg2.prototyping.jgit
 
 import akka.actor.{Actor, ActorContext}
 import spray.routing._
+import spray.json._
+import DefaultJsonProtocol._
 //import spray.http._
 //import MediaTypes._
 //import akka.actor.Actor.Receive
@@ -33,9 +35,24 @@ trait MyService extends HttpService {
             //Backend.clone("https://github.com/csete/gqrx.git")
             Backend.loadRepository()
             println("Loaded repo")
-            Backend.buildCommitGraph()
-            println("Sending graph JSON")
-            complete(Backend.generateJson())
+            complete {
+
+                Backend.buildCommitGraph()
+                println("Sending graph JSON")
+                Backend.generateJson()
+            }
+        } ~
+        path("changes") {
+            complete(Backend.detectChangedFiles().toJson.compactPrint)
+        } ~
+        path("commit") {
+            entity(as[String]) { json =>
+                val files = json.parseJson.convertTo[List[(String, String)]]
+                if(Backend.commit(files))
+                    complete("Committed sucessfully")
+                else
+                    complete("No changes to commit")
+            }
         } ~
         path("") {
             compressResponse() {

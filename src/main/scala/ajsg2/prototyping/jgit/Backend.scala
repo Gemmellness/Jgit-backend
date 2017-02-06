@@ -62,12 +62,6 @@ object Backend {
 			loadRepository()
 			buildCommitGraph()
 			outputJson(generateJson())
-
-			for (message <- io.Source.stdin.getLines){
-				println("Committing: " + message)
-				commit(detectChangedFiles(), message)
-			}
-
 		}catch {
 			case e: Exception => System.err.println("Exception handled:")
 				e.printStackTrace()
@@ -269,21 +263,22 @@ object Backend {
 	/**
 	  * Adds and commits all files given to it, with the specified commit message.
 	  *
-	  * @param files A list of file names
-	  * @param message The commit message
+	  * @param commit A hacky commit object. The element with tag 'message' is the commit object, else it's a file to add and commit.
+	  *
 	  */
-	def commit(files: List[(String, String)], message: String): Unit = {
-		if (files.isEmpty){
+	def commit(commits: List[(String, String)]): Boolean = {
+		if (commits.isEmpty){
 			println("No changes to commit")
-			return
+			return false
 		}
 
 		val add = git.add
 		val rm = git.rm.setCached(true) // Cached - files should only be removed from index, not working directory
+		val commit = git.commit
 		var added = false
 		var rmed = false
 
-		for(f <- files) {
+		for(f <- commits) {
 			f._1 match {
 				case "Modified" =>
 					add.addFilepattern(f._2)
@@ -297,6 +292,8 @@ object Backend {
 					rm.addFilepattern(f._2)
 					rmed = true
 					println(f._1 + ": " + f._2)
+				case "Message" =>
+					commit.setMessage(f._2)
 				case x => println("I fukt up: " + x)
 			}
 		}
@@ -304,8 +301,9 @@ object Backend {
 		if(added) add.call()
 		if(rmed) rm.call()
 
-		git.commit().setMessage(message).call()
+		commit.call()
 		println("Committed changes")
+		return true
 	}
 
 	sealed trait GitGraph

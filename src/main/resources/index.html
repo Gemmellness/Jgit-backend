@@ -95,152 +95,185 @@
         edges: []
     };
 
-    var nodes,
-        edges;
+    var nodes = container.append("g").attr("class", "graph"),
+        edges = container.append("g").attr("class", "edges");
 
-    /* Assumptions about this data:
-     *
-     *  All nodes have unique hashes
-     * The DAG is connected
-     * Depth is the maximum path length to the root
-     *
-     * */
-    d3.json("http://localhost:1985/graph", function(error, data) {
-        if (error) throw error;
+    drawGraph();
 
-        logicalGraph.nodes = [];
-        logicalGraph.edges = data.edges;
+    function drawGraph() {
+        /* Assumptions about this data:
+         *
+         * All nodes have unique hashes
+         * The DAG is connected
+         * Depth is the maximum path length to the root
+         *
+         * */
+        d3.json("http://localhost:1985/graph", function (error, data) {
+            if (error) throw error;
+            nodes.remove();
+            edges.remove();
 
-        var currentLayer = data.nodes.filter(function isHead(node) { return node.depth == 0});
-        var visited = [currentLayer[0].hash];
-        var nextLayer = [];
+            logicalGraph.nodes = [];
+            logicalGraph.edges = data.edges;
 
-        var branches = [currentLayer[0].branch];
-
-        var x = 0;
-
-        while(currentLayer.length > 0){
-            currentLayer = currentLayer.sort(function (a, b) {
-                var ai = branches.indexOf(a.branch);
-                var bi = branches.indexOf(b.branch);
-                if(ai < bi) return -1;
-                if(ai > bi) return 1;
-                return 0;
+            var currentLayer = data.nodes.filter(function isHead(node) {
+                return node.depth == 0
             });
+            var visited = [currentLayer[0].hash];
+            var nextLayer = [];
 
-            for(var j = 0; j < currentLayer.length; j++){
-                var node = currentLayer[j];
+            var branches = [currentLayer[0].branch];
 
-                //Set logical coords
-                //node.x = xSpacing*(x+1);
-                node.x = xSpacing*(branches.indexOf(node.branch)+1);
-                node.y = ySpacing*(node.depth+1);
-                x++;
+            var x = 0;
 
-                // Store data in data
-                logicalGraph.nodes.push(node);
+            while (currentLayer.length > 0) {
+                currentLayer = currentLayer.sort(function (a, b) {
+                    var ai = branches.indexOf(a.branch);
+                    var bi = branches.indexOf(b.branch);
+                    if (ai < bi) return -1;
+                    if (ai > bi) return 1;
+                    return 0;
+                });
 
-                // Find all child nodes not already in the graph (for the next layer)
-                var outEdges = data.edges.filter(function (edge) { return edge.n1 == node.hash;});
+                for (var j = 0; j < currentLayer.length; j++) {
+                    var node = currentLayer[j];
 
-                for(var k = 0; k < outEdges.length; k++){
-                    var candidateChild = data.nodes.find(function (node) {return node.hash == outEdges[k].n2});
+                    //Set logical coords
+                    //node.x = xSpacing*(x+1);
+                    node.x = xSpacing * (branches.indexOf(node.branch) + 1);
+                    node.y = ySpacing * (node.depth + 1);
+                    x++;
 
-                    // Check if already in the graph
-                    var previouslyOccurs = false;
-                    for(var l = 0; l < visited.length && !previouslyOccurs; l++){
-                        if (visited[l] == candidateChild.hash)
-                            previouslyOccurs = true;
-                    }
+                    // Store data in data
+                    logicalGraph.nodes.push(node);
 
-                    // If not already in graph/next layer, push node to next layer queue
-                    if(!previouslyOccurs && candidateChild.depth == node.depth+1) {
-                        nextLayer.push(candidateChild);
-                        visited.push(candidateChild.hash);
+                    // Find all child nodes not already in the graph (for the next layer)
+                    var outEdges = data.edges.filter(function (edge) {
+                        return edge.n1 == node.hash;
+                    });
 
-                        // Check branches
-                        //noinspection JSUnresolvedVariable
-                        if(branches.indexOf(candidateChild.branch) == -1)
-                        { //noinspection JSUnresolvedVariable
-                            branches.push(candidateChild.branch);
+                    for (var k = 0; k < outEdges.length; k++) {
+                        var candidateChild = data.nodes.find(function (node) {
+                            return node.hash == outEdges[k].n2
+                        });
+
+                        // Check if already in the graph
+                        var previouslyOccurs = false;
+                        for (var l = 0; l < visited.length && !previouslyOccurs; l++) {
+                            if (visited[l] == candidateChild.hash)
+                                previouslyOccurs = true;
                         }
-                    }
 
+                        // If not already in graph/next layer, push node to next layer queue
+                        if (!previouslyOccurs && candidateChild.depth == node.depth + 1) {
+                            nextLayer.push(candidateChild);
+                            visited.push(candidateChild.hash);
+
+                            // Check branches
+                            //noinspection JSUnresolvedVariable
+                            if (branches.indexOf(candidateChild.branch) == -1) { //noinspection JSUnresolvedVariable
+                                branches.push(candidateChild.branch);
+                            }
+                        }
+
+                    }
                 }
+
+                currentLayer = nextLayer;
+                nextLayer = [];
+
+                x = 0;
             }
 
-            currentLayer = nextLayer;
-            nextLayer = [];
+            for (var i = 0; i < branches.length; i++) {
+                console.log(branches[i] + " " + i);
+            }
 
-            x = 0;
-        }
-
-        for(var i = 0; i < branches.length; i++){
-            console.log(branches[i] + " " + i);
-        }
-
-        // Create edges
-        edges = container.append("g")
-            .attr("class", "edges")
-            .selectAll(".edge")
-            .data(logicalGraph.edges)
-            .enter().append("line")
-            .attr("class", "edge")
-            .attr("x1", function (d) {return logicalGraph.nodes.find(function (node) {return d.n1 == node.hash;}).x})
-            .attr("y1", function (d) {return logicalGraph.nodes.find(function (node) {return d.n1 == node.hash;}).y})
-            .attr("x2", function (d) {return logicalGraph.nodes.find(function (node) {return d.n2 == node.hash;}).x})
-            .attr("y2", function (d) {return logicalGraph.nodes.find(function (node) {return d.n2 == node.hash;}).y})
-            .attr("n1", function (d) {return d.n1})
-            .attr("n2", function (d) {return d.n2})
-            .attr("stroke", (function (d) {
-                return highlightColours[branches.indexOf(data.nodes.filter(function isTarget(node) {return node.hash == d.n2})[0].branch) % highlightColours.length];
-            }))
-            .attr("opacity", 0.6)
-            .attr("stroke-width", 3);
+            // Create edges
+            edges = container.append("g").attr("class", "edges")
+                .selectAll(".edge")
+                .data(logicalGraph.edges)
+                .enter().append("line")
+                .attr("class", "edge")
+                .attr("x1", function (d) {
+                    return logicalGraph.nodes.find(function (node) {
+                        return d.n1 == node.hash;
+                    }).x
+                })
+                .attr("y1", function (d) {
+                    return logicalGraph.nodes.find(function (node) {
+                        return d.n1 == node.hash;
+                    }).y
+                })
+                .attr("x2", function (d) {
+                    return logicalGraph.nodes.find(function (node) {
+                        return d.n2 == node.hash;
+                    }).x
+                })
+                .attr("y2", function (d) {
+                    return logicalGraph.nodes.find(function (node) {
+                        return d.n2 == node.hash;
+                    }).y
+                })
+                .attr("n1", function (d) {
+                    return d.n1
+                })
+                .attr("n2", function (d) {
+                    return d.n2
+                })
+                .attr("stroke", (function (d) {
+                    return highlightColours[branches.indexOf(data.nodes.filter(function isTarget(node) {
+                        return node.hash == d.n2
+                    })[0].branch) % highlightColours.length];
+                }))
+                .attr("opacity", 0.6)
+                .attr("stroke-width", 3);
             //.attr("marker-end", "url(#arrow");
 
-        // Create nodes
-        nodes = container.append("g")
-            .attr("class", "graph")
-            .selectAll("node")
-            .data(logicalGraph.nodes)
-            .enter().append("circle")
-            .attr("class", "node")
-            .attr("r", nodeSize)
-            .attr("cx", function(d) {return d.x;})
-            .attr("cy", function(d) {return d.y;})
-            .attr("fill", function (d) {
-                return highlightColours[branches.indexOf(d.branch) % highlightColours.length];
-            })
-            .call(drag)
-            .on("mouseover", function (d, i) {
-                d3.select(this).attr("stroke", baseColours[1])
-                    .attr("stroke-width", "1.5px");
+            // Create nodes
+            nodes = container.append("g").attr("class", "graph")
+                .selectAll("node")
+                .data(logicalGraph.nodes)
+                .enter().append("circle")
+                .attr("class", "node")
+                .attr("r", nodeSize)
+                .attr("cx", function (d) {
+                    return d.x;
+                })
+                .attr("cy", function (d) {
+                    return d.y;
+                })
+                .attr("fill", function (d) {
+                    return highlightColours[branches.indexOf(d.branch) % highlightColours.length];
+                })
+                .call(drag)
+                .on("mouseover", function (d, i) {
+                    d3.select(this).attr("stroke", baseColours[1])
+                        .attr("stroke-width", "1.5px");
 
-                if(!mouseDown)
-                    labels.append("text")
-                        .attr("class", "label")
-                        .attr("text-anchor", "middle")
-                        .attr("x", d.x)
-                        .attr("y", d.y + 25)
-                        .text(d.hash.substring(0, 6) + "...")
-                        .attr("node", i)
-                        .attr("fill", baseColours[6])
-                        .attr("font-family", "sans-serif")
-                        .attr("font-weight", "bold")
-                        .raise();
-            })
-            .on("mouseout", function () {
-                d3.select(this).attr("stroke-width", "0px");
+                    if (!mouseDown)
+                        labels.append("text")
+                            .attr("class", "label")
+                            .attr("text-anchor", "middle")
+                            .attr("x", d.x)
+                            .attr("y", d.y + 25)
+                            .text(d.hash.substring(0, 6) + "...")
+                            .attr("node", i)
+                            .attr("fill", baseColours[6])
+                            .attr("font-family", "sans-serif")
+                            .attr("font-weight", "bold")
+                            .raise();
+                })
+                .on("mouseout", function () {
+                    d3.select(this).attr("stroke-width", "0px");
 
-                // IMPORTANT - only 1 label can be present at once (I think)
-                if(!mouseDown)
-                    labels.selectAll(".label").remove();
-            });
+                    if (!mouseDown)
+                        labels.selectAll(".label").remove();
+                });
 
-        labels.raise();
-
-    });
+            labels.raise();
+        });
+    }
 
     function updateEdges () {
         edges.attr("x1", function (d) {return logicalGraph.nodes.find(function (node) {return d.n1 == node.hash;}).x})
@@ -294,6 +327,47 @@
             .attr("y", logicalGraph.nodes[index].y+20);
 
         mouseDown = 0;
+    }
+
+    function getChanges(message){
+        var http = new XMLHttpRequest();
+        var url = "http://localhost:1985/changes";
+        var xmlHttp = new XMLHttpRequest();
+        var changes = "";
+
+        xmlHttp.onreadystatechange = function() {
+            if (xmlHttp.readyState == 4 && xmlHttp.status == 200)
+                commitChanges(xmlHttp.responseText, message);
+        };
+        xmlHttp.open("GET", url, true); // true for asynchronous
+        xmlHttp.send(null);
+    }
+
+    function commitChanges(files, message) {
+        var http = new XMLHttpRequest();
+        var url = "http://localhost:1985/commit";
+        http.open("POST", url, true);
+
+        // Awful hacky way to include commit message
+        var filesObject = JSON.parse(files);
+        filesObject.push(["Message", message]);
+        files = JSON.stringify(filesObject);
+
+
+        //Send the proper header information along with the request
+        //http.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+
+        http.onreadystatechange = function() {//Call a function when the state changes.
+            if(http.readyState == 4 && http.status == 200) {
+                console.log(http.responseText);
+
+                if(http.responseText == "Committed sucessfully")
+                    drawGraph();
+
+            }
+        };
+
+        http.send(files);
     }
 
 </script></body>
