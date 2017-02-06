@@ -14,7 +14,7 @@ import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import scala.collection.mutable
+import scala.collection.{Set, mutable}
 import scalax.collection.Graph
 import scalax.collection.GraphEdge._
 import scalax.collection.GraphPredef._
@@ -63,8 +63,10 @@ object Backend {
 			buildCommitGraph()
 			outputJson(generateJson())
 
-			for (_ <- io.Source.stdin.getLines)
-				println(detectChangedFiles())
+			for (message <- io.Source.stdin.getLines){
+				println("Committing: " + message)
+				commit(detectChangedFiles(), message)
+			}
 
 		}catch {
 			case e: Exception => System.err.println("Exception handled:")
@@ -150,21 +152,21 @@ object Backend {
 			}else {
 				// Branch created here
 
-				// First check to see if any child branches match the branch being currently assigned. If not we should definitely assign this branch to prevent infinite loops
-				if(node.diSuccessors.count(_.value.branch == branch) == 0){
+				// First check the number of valid children (the nodes which have this node as their first parent
+				val validChildren = successors.filter(_.value.parents.head == node.value.hash)
+
+				// If none, we should definitely assign the label to avoid infinite loops, recurse on first parent
+				if (validChildren.isEmpty) {
 					node.value.branch = branch
 					if (predecessors.nonEmpty)
 						labelBranch(predecessors.filter(_.value.hash == node.value.parents.head).head, branch)
-				}else{
-					// Else, compare child commit times
-					val oldestSibling = node.diSuccessors.minBy(_.value.dateVal)
-
-					if(oldestSibling.value.branch == branch) {
-						// This node belongs to the oldest child's branch.
-						node.value.branch = branch
-						if (predecessors.nonEmpty)
-							labelBranch(predecessors.filter(_.value.hash == node.value.parents.head).head, branch)
-					}
+				}
+				//If at least 1 valid child, find the youngest
+				else if(validChildren.maxBy(_.value.dateVal).value.branch == branch) {
+					// This node belongs to the youngest child's branch.
+					node.value.branch = branch
+					if (predecessors.nonEmpty)
+						labelBranch(predecessors.filter(_.value.hash == node.value.parents.head).head, branch)
 				}
 			}
 		}
@@ -177,14 +179,12 @@ object Backend {
 		var candidateBranches = graph.nodes.filter((n : Graph[Commit, DiEdge]#NodeT) => n.value.branch == "" &&
 			n.diSuccessors.count(_.value.branch == "") == 0)
 
-		var i = 0
 		while(candidateBranches.nonEmpty){
+			println(candidateBranches.size)
+
 			candidateBranches.zipWithIndex.foreach{ t => labelBranch(t._1, "unnamedbranch" + t._2)}
 			candidateBranches = graph.nodes.filter((n : Graph[Commit, DiEdge]#NodeT) => n.value.branch == "" &&
 					n.diSuccessors.count(_.value.branch == "") == 0)
-
-			println(candidateBranches.size)
-			i += 1
 		}
 	}
 
@@ -245,20 +245,67 @@ object Backend {
 
 	}
 
-	def detectChangedFiles() : List[String] = {
-		var output: List[String] = List[String]()
+	/**
+	  * Detects all changes (to repository on disk, not index) and returns them
+	  *
+	  * @return A list of (String, String) - The first element of the tuple indicates the type of change made to the file represented by the second element
+	  */
+	def detectChangedFiles(): List[(String, String)] = {
+		var output: List[(String, String)] = List[(String, String)]()
 		val status: Status = git.status().call()
 
 		for(m <- status.getModified.iterator.asScala)
-			output = ("Modified: " + m) :: output
+			output = ("Modified", m) :: output
 
 		for(m <- status.getMissing.iterator.asScala)
-			output = ("Missing: " + m) :: output
+			output = ("Missing", m) :: output
 
 		for(u <- status.getUntracked.iterator.asScala)
-			output = ("Untracked: " + u) :: output
+			output = ("Untracked", u) :: output
 
 		output
+	}
+
+	/**
+	  * Adds and commits all files given to it, with the specified commit message.
+	  *
+	  * @param files A list of file names
+	  * @param message The commit message
+	  */
+	def commit(files: List[(String, String)], message: String): Unit = {
+		if (files.isEmpty){
+			println("No changes to commit")
+			return
+		}
+
+		val add = git.add
+		val rm = git.rm.setCached(true) // Cached - files should only be removed from index, not working directory
+		var added = false
+		var rmed = false
+
+		for(f <- files) {
+			f._1 match {
+				case "Modified" =>
+					add.addFilepattern(f._2)
+					added = true
+					println(f._1 + ": " + f._2)
+				case "Untracked" =>
+					add.addFilepattern(f._2)
+					added = true
+					println(f._1 + ": " + f._2)
+				case "Missing" =>
+					rm.addFilepattern(f._2)
+					rmed = true
+					println(f._1 + ": " + f._2)
+				case x => println("I fukt up: " + x)
+			}
+		}
+		// Requires at least one file pattern to call
+		if(added) add.call()
+		if(rmed) rm.call()
+
+		git.commit().setMessage(message).call()
+		println("Committed changes")
 	}
 
 	sealed trait GitGraph
