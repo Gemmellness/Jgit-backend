@@ -263,7 +263,7 @@ object Backend {
 	/**
 	  * Adds and commits all files given to it, with the specified commit message.
 	  *
-	  * @param commit A hacky commit object. The element with tag 'message' is the commit object, else it's a file to add and commit.
+	  * @param commits A hacky commit object. The element with tag 'message' is the commit object, else it's a file to add and commit.
 	  *
 	  */
 	def commit(commits: List[(String, String)]): Boolean = {
@@ -303,7 +303,7 @@ object Backend {
 
 		commit.call()
 		println("Committed changes")
-		return true
+		true
 	}
 
 	sealed trait GitGraph

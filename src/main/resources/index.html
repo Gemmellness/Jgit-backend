@@ -16,16 +16,31 @@
             r: 5;
         }
 
-        .label text{
-            font-family: "sans-serif";
-            font-weight: bold;
-        }
+        /*.labels {
+            border: 2px solid #000;
+            overflow-y: scroll;
+            overflow-x: hidden;
+            display: block;
+            width: 200%;
+            height: 200%;
+        }*/
 
     </style>
 </head>
 
-<body onresize="resize()"><script src="http://d3js.org/d3.v4.min.js" charset="utf-8"></script>
+<!--
+ onresize="resize()"-->
+<body ><script src="http://d3js.org/d3.v4.min.js" charset="utf-8"></script>
+
+<div class="labels" style='height:200px; width: 200px; background: #000; overflow-y: scroll; overflow-x: hidden; position: absolute; left: 100px; top: 200px'>
+    <div style="height:300px; width: 200px; background: #FFFFFF">
+        <!--<rect class="label" height="260" width="800" fill="#fdf6e3" x="100" y="50" rx="15" ry="15">
+        </rect> -->
+    </div>
+</div>
+
 <script>
+
     /* Magic numbers etc */
     var width = innerWidth,
         height = innerHeight;
@@ -61,6 +76,14 @@
             .attr("transform", "translate(" + 0 + "," + 0 + ")")
             .call(zoom);
 
+    /*var rectangle = d3.select(".labels")
+        .append("rect")
+        .attr("width", 175)
+        .attr("height", 320)
+        .attr("fill", "steelblue")
+        .attr("x", 0)
+        .attr("y", 0);*/
+
     // Panning rectangle
     var rect = graph.append("rect")
             .attr("width", width)
@@ -70,8 +93,8 @@
 
     var container = graph.append("g");
 
-    var labels = container.append("g")
-        .attr("class", "labels");
+    //var labels = container.append("svg")
+    //    .attr("class", "labels");
 
     var mouseDown = 0;
 
@@ -252,17 +275,7 @@
                         .attr("stroke-width", "1.5px");
 
                     if (!mouseDown)
-                        labels.append("text")
-                            .attr("class", "label")
-                            .attr("text-anchor", "middle")
-                            .attr("x", d.x)
-                            .attr("y", d.y + 25)
-                            .text(d.hash.substring(0, 6) + "...")
-                            .attr("node", i)
-                            .attr("fill", baseColours[6])
-                            .attr("font-family", "sans-serif")
-                            .attr("font-weight", "bold")
-                            .raise();
+                        labels.append("rect")
                 })
                 .on("mouseout", function () {
                     d3.select(this).attr("stroke-width", "0px");
@@ -336,8 +349,12 @@
         var changes = "";
 
         xmlHttp.onreadystatechange = function() {
-            if (xmlHttp.readyState == 4 && xmlHttp.status == 200)
-                commitChanges(xmlHttp.responseText, message);
+            if (xmlHttp.readyState == 4 && xmlHttp.status == 200) {
+                if( xmlHttp.response != "[]")
+                    commitChanges(xmlHttp.responseText, message);
+                else
+                    console.log("No changes to commit")
+            }
         };
         xmlHttp.open("GET", url, true); // true for asynchronous
         xmlHttp.send(null);
