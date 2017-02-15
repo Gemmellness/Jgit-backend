@@ -31,7 +31,7 @@ trait MyService extends HttpService {
 
     val myRoute: Route =
         path("graph") {
-            Backend.setDirectory("C:\\Users\\Adam\\OneDrive\\Documents\\Project\\prototyping\\backend\\testingfolder\\test")
+            Backend.setDirectory("C:\\Users\\Adam\\OneDrive\\Documents\\Project\\prototyping\\backend\\testingfolder\\solarhud")
             //Backend.clone("https://github.com/csete/gqrx.git")
             Backend.loadRepository()
             println("Loaded repo")

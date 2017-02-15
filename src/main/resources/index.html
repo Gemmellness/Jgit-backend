@@ -16,27 +16,49 @@
             r: 5;
         }
 
-        /*.labels {
-            border: 2px solid #000;
-            overflow-y: scroll;
+        .label {
+            border:  5px solid #93a1a1;
+            background: #fdf6e3;
+            overflow-y: auto;
             overflow-x: hidden;
             display: block;
-            width: 200%;
-            height: 200%;
-        }*/
+            position: absolute;
+            height: 200px;
+            width: 500px;
+            /*border-radius: 15px;*/
+            padding: 10px;
+        }
+
+        table, tr, td {
+            border: none;
+            font-family: Verdana,sans-serif;
+            font-size: 100%;
+            vertical-align: top;
+        }
 
     </style>
 </head>
 
-<!--
- onresize="resize()"-->
-<body ><script src="http://d3js.org/d3.v4.min.js" charset="utf-8"></script>
+<body onresize="resize()"><script src="http://d3js.org/d3.v4.min.js" charset="utf-8"></script>
 
-<div class="labels" style='height:200px; width: 200px; background: #000; overflow-y: scroll; overflow-x: hidden; position: absolute; left: 100px; top: 200px'>
-    <div style="height:300px; width: 200px; background: #FFFFFF">
-        <!--<rect class="label" height="260" width="800" fill="#fdf6e3" x="100" y="50" rx="15" ry="15">
-        </rect> -->
-    </div>
+<div class="label" id="label" style="left: -1000px; top: -1000px">
+    <table class="labelTable" border="1" width="100%">
+        <tr>
+            <td width="70px">Hash:</td><td id="hash" colspan="2">dfgiljsd;lgijsdg</td>
+        </tr>
+        <tr>
+            <td width="70px">Author:</td><td id="author" colspan="2">klfuhalfhahfal</td>
+        </tr>
+        <tr>
+            <td width="70px">Date:</td><td id="date" colspan="2">20th afihahfahf 56412</td>
+        </tr>
+        <tr>
+            <td width="70px">Branch:</td><td id="branch" colspan="2">refs/origin/asoidosdihf</td>
+        </tr>
+        <tr>
+            <td width="70px">Message:</td><td id="message" colspan="2">asd;foijsaf;ijaslfhalksfhalskjhflkshflkashf fsfsf ijaslfhalksfhalskjhflkshflkashfijaslfhalksfhalskjhflkshflkashfijaslfhalksfhalskjhflkshflkashfijaslfhalksfhalskjhflkshflkashfijaslfhalksfhalskjhflkshflkashfijaslfhalksfhalskjhflkshflkashf ijaslfhalksfhalskjhflkshflkashf.</td>
+        </tr>
+    </table>
 </div>
 
 <script>
@@ -76,14 +98,6 @@
             .attr("transform", "translate(" + 0 + "," + 0 + ")")
             .call(zoom);
 
-    /*var rectangle = d3.select(".labels")
-        .append("rect")
-        .attr("width", 175)
-        .attr("height", 320)
-        .attr("fill", "steelblue")
-        .attr("x", 0)
-        .attr("y", 0);*/
-
     // Panning rectangle
     var rect = graph.append("rect")
             .attr("width", width)
@@ -92,9 +106,6 @@
             .style("pointer-events", "all");
 
     var container = graph.append("g");
-
-    //var labels = container.append("svg")
-    //    .attr("class", "labels");
 
     var mouseDown = 0;
 
@@ -208,10 +219,6 @@
                 x = 0;
             }
 
-            for (var i = 0; i < branches.length; i++) {
-                console.log(branches[i] + " " + i);
-            }
-
             // Create edges
             edges = container.append("g").attr("class", "edges")
                 .selectAll(".edge")
@@ -270,21 +277,36 @@
                     return highlightColours[branches.indexOf(d.branch) % highlightColours.length];
                 })
                 .call(drag)
-                .on("mouseover", function (d, i) {
-                    d3.select(this).attr("stroke", baseColours[1])
+                .on("mouseover", function (d) {
+                    d3.select(this)
+                        .attr("stroke", baseColours[1])
                         .attr("stroke-width", "1.5px");
 
-                    if (!mouseDown)
-                        labels.append("rect")
+                    if (!mouseDown) {
+                        var rect = d3.select(this).node().getBoundingClientRect();
+
+                        document.getElementById("label")
+                            .style.left = rect.left + rect.width + 10 + "px";
+                        document.getElementById("label")
+                            .style.top = rect.top + rect.height/2 - 100 + "px";
+                        document.getElementById("hash").innerHTML = d.hash;
+                        document.getElementById("author").innerHTML = d.author;
+                        document.getElementById("date").innerHTML = d.date;
+                        document.getElementById("branch").innerHTML = d.branch;
+                        document.getElementById("message").innerHTML = d.message;
+
+                    }
                 })
                 .on("mouseout", function () {
                     d3.select(this).attr("stroke-width", "0px");
 
-                    if (!mouseDown)
-                        labels.selectAll(".label").remove();
+                    if (!mouseDown) {
+                        document.getElementById("label")
+                            .style.left = "-1000px";
+                        document.getElementById("label")
+                            .style.top = "-1000px";
+                    }
                 });
-
-            labels.raise();
         });
     }
 
@@ -316,8 +338,11 @@
 
     function dragStarted() {
         d3.event.sourceEvent.stopPropagation();
-        labels.selectAll(".label")
-            .attr("visibility", "hidden");
+
+        document.getElementById("label")
+            .style.left = "-1000px";
+        document.getElementById("label")
+            .style.top = "-1000px";
 
         mouseDown = 1;
     }
@@ -332,12 +357,12 @@
     function dragEnded(){
         // Update label (only 1)
 
-        var index = labels.select(".label").attr("node");
+        var rect = d3.select(this).node().getBoundingClientRect();
 
-        labels.select(".label")
-            .attr("visibility", "visible")
-            .attr("x", logicalGraph.nodes[index].x)
-            .attr("y", logicalGraph.nodes[index].y+20);
+        document.getElementById("label")
+            .style.left = rect.left + rect.width + 10 + "px";
+        document.getElementById("label")
+            .style.top = rect.top + rect.height/2 - 100 + "px";
 
         mouseDown = 0;
     }

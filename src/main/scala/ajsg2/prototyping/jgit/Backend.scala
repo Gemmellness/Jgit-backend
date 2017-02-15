@@ -46,7 +46,7 @@ object Backend {
 
 	val commitDescriptor = new NodeDescriptor[Commit](typeId = "Commits") {
 		def id(node: Any): String = node match {
-			case Commit(hash, _, _, _, _, _, _) => hash
+			case Commit(hash, _, _, _, _, _, _, _) => hash
 		}
 	}
 
@@ -99,7 +99,7 @@ object Backend {
 			val parents : List[RevCommit] = commit.getParents.toList
 			val parentsHashes: List[String] = parents.map(_.getName)
 			val c = Commit(commit.getName, commit.getAuthorIdent.getName + ", " + commit.getAuthorIdent.getEmailAddress,
-				"", date.toString, date.getTime, -1, parentsHashes)
+				"", date.toString, commit.getFullMessage, date.getTime, -1, parentsHashes)
 
 			nodes += ((c.hash, c))
 		})
@@ -109,7 +109,7 @@ object Backend {
 
 		commits2.asScala.foreach(commit => {
 			val parents = commit.getParents
-			val default = Commit("error", "error", "", new Date(0L).toString, 0L, -1, List(""))
+			val default = Commit("error", "error", "", new Date(0L).toString, "", 0L, -1, List(""))
 
 			parents.foreach( (p : RevCommit) => edges += nodes.getOrElse(p.getName, default) ~> nodes.getOrElse(
 				commit.getName, default))
@@ -169,14 +169,17 @@ object Backend {
 		git.branchList().setListMode(ListMode.ALL).call().asScala.foreach((r : Ref) => labelBranch(graph.nodes.toSet.filter(
 			_.value.hash == r.getObjectId.getName).head, r.getName))
 
+
+		var numUB = 0
 		// Assign a name to unnamed branches
 		var candidateBranches = graph.nodes.filter((n : Graph[Commit, DiEdge]#NodeT) => n.value.branch == "" &&
 			n.diSuccessors.count(_.value.branch == "") == 0)
 
 		while(candidateBranches.nonEmpty){
-			println(candidateBranches.size)
 
-			candidateBranches.zipWithIndex.foreach{ t => labelBranch(t._1, "unnamedbranch" + t._2)}
+			candidateBranches.foreach{ t => labelBranch(t, "unnamedbranch" + numUB)
+				numUB += 1
+			}
 			candidateBranches = graph.nodes.filter((n : Graph[Commit, DiEdge]#NodeT) => n.value.branch == "" &&
 					n.diSuccessors.count(_.value.branch == "") == 0)
 		}
@@ -307,7 +310,7 @@ object Backend {
 	}
 
 	sealed trait GitGraph
-	case class Commit(hash:String, author:String, var branch:String, date:String, dateVal: Long, var depth:Int,
+	case class Commit(hash:String, author:String, var branch:String, date:String, message:String, dateVal: Long, var depth:Int,
 					  parents:List[String]) extends GitGraph
 }
 
