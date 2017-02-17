@@ -6,7 +6,9 @@ import java.net.{MalformedURLException, URI, URISyntaxException, URL}
 import java.util.Date
 
 import ajsg2.prototyping.jgit.exceptions._
+import org.eclipse.jgit.api.CreateBranchCommand.SetupUpstreamMode
 import org.eclipse.jgit.api.ListBranchCommand.ListMode
+import org.eclipse.jgit.api.errors.RefAlreadyExistsException
 import org.eclipse.jgit.api.{CloneCommand, Git, Status}
 import org.eclipse.jgit.lib.{Ref, Repository}
 import org.eclipse.jgit.revwalk.RevCommit
@@ -225,6 +227,7 @@ object Backend {
 			val clone: CloneCommand = Git.cloneRepository
 				.setURI(uri.toString)
 				.setDirectory(workingDir)
+				.setCloneAllBranches(true)
 
 			if (workingDir.exists)
 				throw CloneDirectoryExistsException("The directory " + workingDir.toString + " already exists")
@@ -307,6 +310,26 @@ object Backend {
 		commit.call()
 		println("Committed changes")
 		true
+	}
+
+	def checkoutBranch(branch: String): Unit = {
+		try {
+			git.checkout().setCreateBranch(true).setName(branch)
+				.setUpstreamMode(SetupUpstreamMode.SET_UPSTREAM)
+				.setStartPoint("origin/" + branch).call()
+			println("Checked out remote branch: " + branch)
+		} catch {
+			case
+				_: RefAlreadyExistsException  => git.checkout().setName(branch).call()
+					println("Checked out local branch: " + branch)
+		}
+
+	}
+
+	def checkoutCommit(commit: String): Unit = {
+		git.checkout().setName(commit).call()
+
+		println("Checked out commit: " + commit)
 	}
 
 	sealed trait GitGraph
