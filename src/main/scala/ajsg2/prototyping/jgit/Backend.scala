@@ -168,9 +168,9 @@ object Backend {
 		}
 
 		// Start at each branch
-		git.branchList().setListMode(ListMode.ALL).call().asScala.foreach((r : Ref) => labelBranch(graph.nodes.toSet.filter(
-			_.value.hash == r.getObjectId.getName).head, r.getName))
 
+		git.branchList().setListMode(ListMode.ALL).call().asScala.foreach((r : Ref) => labelBranch(graph.nodes.toSet
+			.filter(_.value.hash == r.getObjectId.getName).head, r.getName))
 
 		var numUB = 0
 		// Assign a name to unnamed branches
@@ -312,24 +312,37 @@ object Backend {
 		true
 	}
 
-	def checkoutBranch(branch: String): Unit = {
-		try {
-			git.checkout().setCreateBranch(true).setName(branch)
-				.setUpstreamMode(SetupUpstreamMode.SET_UPSTREAM)
-				.setStartPoint("origin/" + branch).call()
-			println("Checked out remote branch: " + branch)
-		} catch {
-			case
-				_: RefAlreadyExistsException  => git.checkout().setName(branch).call()
-					println("Checked out local branch: " + branch)
-		}
+	def checkout(commit: String): String = {
+		var branch: String = ""
 
+		git.branchList().setListMode(ListMode.ALL).call().asScala.foreach(
+			(r : Ref) => {println(r.getName)
+				if(r.getObjectId.getName == commit)
+					branch = r.getName})
+
+		branch match {
+			case "" => git.checkout().setName(commit).call()
+				println("Checked out commit: " + commit)
+				"Checked out commit: " + commit
+			case _ =>
+				val b = branch.stripPrefix("refs/remotes/")
+				try {
+					git.checkout().setCreateBranch(true).setName(b)
+						.setUpstreamMode(SetupUpstreamMode.SET_UPSTREAM)
+						.setStartPoint(b).call()
+
+					println("Checked out remote branch: " + b)
+					"Checked out remote branch: " + b
+				} catch {
+					case
+						_: RefAlreadyExistsException => git.checkout().setName(branch).call()
+						println("Checked out local branch: " + b)
+						"Checked out local branch: " + b
+				}
+		}
 	}
 
 	def checkoutCommit(commit: String): Unit = {
-		git.checkout().setName(commit).call()
-
-		println("Checked out commit: " + commit)
 	}
 
 	sealed trait GitGraph

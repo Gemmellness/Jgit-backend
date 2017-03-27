@@ -12,10 +12,6 @@
             overflow-x: hidden;
         }
 
-        .node circle{
-            r: 5;
-        }
-
         .label {
             border:  5px solid #93a1a1;
             background: #fdf6e3;
@@ -36,6 +32,16 @@
             vertical-align: top;
         }
 
+        circle[checked="1"] {
+            fill: "#000000";
+            r: 20;
+        }
+
+        circle[checked="0"] {
+            fill: "FFFFFF";
+            r: 10;
+        }
+
     </style>
 </head>
 
@@ -44,19 +50,24 @@
 <div class="label" id="label" style="left: -1000px; top: -1000px">
     <table class="labelTable" border="1" width="100%">
         <tr>
-            <td width="70px">Hash:</td><td id="hash" colspan="2">dfgiljsd;lgijsdg</td>
+            <td width="70px">Hash:</td>
+            <td id="hash" colspan="2"></td>
         </tr>
         <tr>
-            <td width="70px">Author:</td><td id="author" colspan="2">klfuhalfhahfal</td>
+            <td width="70px">Author:</td>
+            <td id="author" colspan="2"></td>
         </tr>
         <tr>
-            <td width="70px">Date:</td><td id="date" colspan="2">20th afihahfahf 56412</td>
+            <td width="70px">Date:</td>
+            <td id="date" colspan="2"></td>
         </tr>
         <tr>
-            <td width="70px">Branch:</td><td id="branch" colspan="2">refs/origin/asoidosdihf</td>
+            <td width="70px">Branch:</td>
+            <td id="branch" colspan="2"></td>
         </tr>
         <tr>
-            <td width="70px">Message:</td><td id="message" colspan="2">asd;foijsaf;ijaslfhalksfhalskjhflkshflkashf fsfsf ijaslfhalksfhalskjhflkshflkashfijaslfhalksfhalskjhflkshflkashfijaslfhalksfhalskjhflkshflkashfijaslfhalksfhalskjhflkshflkashfijaslfhalksfhalskjhflkshflkashfijaslfhalksfhalskjhflkshflkashf ijaslfhalksfhalskjhflkshflkashf.</td>
+            <td width="70px">Message:</td>
+            <td id="message" colspan="2">XD</td>
         </tr>
     </table>
 </div>
@@ -73,7 +84,6 @@
 
     var xSpacing = 40;
     var ySpacing = 50;
-    var nodeSize = 10;
 
     /* Behaviours */
     // Zoom behaviour
@@ -96,7 +106,7 @@
             .attr("height", height)
             .append("g")
             .attr("transform", "translate(" + 0 + "," + 0 + ")")
-            .call(zoom);
+            .call(zoom).on("dblclick.zoom", null);
 
     // Panning rectangle
     var rect = graph.append("rect")
@@ -266,7 +276,8 @@
                 .data(logicalGraph.nodes)
                 .enter().append("circle")
                 .attr("class", "node")
-                .attr("r", nodeSize)
+                .attr("checked", "0")
+                .attr("hash", function(d) { return d.hash})
                 .attr("cx", function (d) {
                     return d.x;
                 })
@@ -285,15 +296,18 @@
                     if (!mouseDown) {
                         var rect = d3.select(this).node().getBoundingClientRect();
 
-                        document.getElementById("label")
-                            .style.left = rect.left + rect.width + 10 + "px";
-                        document.getElementById("label")
-                            .style.top = rect.top + rect.height/2 - 100 + "px";
+                        // Set label data
                         document.getElementById("hash").innerHTML = d.hash;
                         document.getElementById("author").innerHTML = d.author;
                         document.getElementById("date").innerHTML = d.date;
                         document.getElementById("branch").innerHTML = d.branch;
                         document.getElementById("message").innerHTML = d.message;
+
+                        // Position label
+                        document.getElementById("label")
+                            .style.left = rect.left + rect.width + 10 + "px";
+                        document.getElementById("label")
+                            .style.top = rect.top + rect.height/2 - 100 + "px";
 
                     }
                 })
@@ -306,13 +320,22 @@
                         document.getElementById("label")
                             .style.top = "-1000px";
                     }
+                })
+                .on("dblclick", function() {
+                    d3.selectAll("[checked='1']").attr("checked", "0");
+
+                    d3.select(this).attr("checked", "1");
+                    checkout(d3.select(this).attr("hash"))
                 });
         });
     }
 
-    function updateEdges () {
-        edges.attr("x1", function (d) {return logicalGraph.nodes.find(function (node) {return d.n1 == node.hash;}).x})
-            .attr("y1", function (d) {return logicalGraph.nodes.find(function (node) {return d.n1 == node.hash;}).y})
+    function updateEdges (hash) {
+        edges.filter(function (e) {return e.n1 == hash})
+            .attr("x1", function (d) {return logicalGraph.nodes.find(function (node) {return d.n1 == node.hash;}).x})
+            .attr("y1", function (d) {return logicalGraph.nodes.find(function (node) {return d.n1 == node.hash;}).y});
+
+        edges.filter(function (e) {return e.n2 == hash})
             .attr("x2", function (d) {return logicalGraph.nodes.find(function (node) {return d.n2 == node.hash;}).x})
             .attr("y2", function (d) {return logicalGraph.nodes.find(function (node) {return d.n2 == node.hash;}).y});
     }
@@ -351,7 +374,7 @@
         d3.select(this).attr("cx", d.x = d3.event.x)
                 .attr("cy", d.y = d3.event.y);
 
-        updateEdges();
+        updateEdges(d3.select(this).attr("hash"));
     }
 
     function dragEnded(){
@@ -410,6 +433,23 @@
         };
 
         http.send(files);
+    }
+
+    function checkout (hash) {
+        var http = new XMLHttpRequest();
+        var url = "http://localhost:1985/checkout/" + hash;
+        http.open("POST", url, true);
+
+        //Send the proper header information along with the request
+        //http.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+
+        http.onreadystatechange = function() {//Call a function when the state changes.
+            if(http.readyState == 4 && http.status == 200) {
+                console.log(http.responseText);
+            }
+        };
+
+        http.send(".");
     }
 
 </script></body>

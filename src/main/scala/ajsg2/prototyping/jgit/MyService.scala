@@ -31,7 +31,7 @@ trait MyService extends HttpService {
 
     val myRoute: Route =
         path("graph") {
-            Backend.setDirectory("C:\\Users\\Adam\\OneDrive\\Documents\\Project\\prototyping\\backend\\testingfolder\\solarhud")
+            Backend.setDirectory("C:\\Users\\Adam\\Documents\\testingfolder\\solarhud")
             //Backend.clone("https://github.com/Stochast1c/solarhud.git")
             Backend.loadRepository()
             println("Loaded repo")
@@ -53,12 +53,9 @@ trait MyService extends HttpService {
                     complete("No changes to commit")
             }
         } ~
-        path("checkout" / Segment / Segment) {
-            (a, b) =>  a match {
-                case "commit" => Backend.checkoutCommit(b)
-                case "branch" => Backend.checkoutBranch(b)
-            }
-            complete("done")
+        path("checkout" /  Segment) { a =>
+            println(a)
+            complete(Backend.checkout(a))
         } ~
         path("") {
             compressResponse() {
